@@ -5,18 +5,18 @@ A minimal and modern PyTorch implementation of YOLOv3 that leverages pre-trained
 
 ![](data/demo/dog.png)
 
-![](data/demo/eagle.png)
-
 ![](data/demo/street.png)
+
+See other [examples](data/demo).
 
 ## Requirements
 
-- conda
-- python
-- pytorch
-- torchvision
-- timm
-- matplotlib
+- conda 25.9.1+
+- python 3.14.3+
+- pytorch 2.10.0+
+- torchvision 0.25.0+
+- timm 1.0.26+
+- matplotlib 3.10.8+
 
 ## Quick Start
 
@@ -29,7 +29,7 @@ conda env create -f environment.yaml
 conda activate v3
 ```
 
-Download the pretrainded weights from the Release page and place it in the `data/` folder. 
+Download the pretrained weights from the Release page and place it in the `data/` folder. 
 
 ```sh
 cd data/
@@ -76,11 +76,11 @@ python yolo_train.py
 
 ## References
 
-- You Only Look Once: Unified, Real-Time Object Detection
-- SSD: Single Shot MultiBox Detector
-- YOLO9000: Better, Faster, Stronger
-- YOLOv3: An Incremental Improvement
+- [You Only Look Once: Unified, Real-Time Object Detection](https://arxiv.org/abs/1506.02640)
+- [SSD: Single Shot MultiBox Detector](https://arxiv.org/abs/1512.02325)
+- [YOLO9000: Better, Faster, Stronger](https://arxiv.org/abs/1612.08242)
+- [YOLOv3: An Incremental Improvement](https://arxiv.org/abs/1804.02767)
 
 ## License
 
-MIT
+[MIT](https://github.com/totravel/yolov3/blob/main/LICENSE)
