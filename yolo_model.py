@@ -47,9 +47,9 @@ class Backbone(nn.Module):
     x = self.cbl(x)      # (N, 32, 416, 416)
     x = self.layer1(x)   # (N, 64, 208, 208)
     x = self.layer2(x)   # (N, 128, 104, 104)
-    y1 = self.layer3(x)   # (N, 256, 52, 52)
-    y2 = self.layer4(y1)   # (N, 512, 26, 26)
-    y3 = self.layer5(y2)   # (N, 1024, 13, 13)
+    y1 = self.layer3(x)  # (N, 256, 52, 52)
+    y2 = self.layer4(y1) # (N, 512, 26, 26)
+    y3 = self.layer5(y2) # (N, 1024, 13, 13)
     return y1, y2, y3
 
 
@@ -113,7 +113,7 @@ class YOLOv3(nn.Module):
 
     self.backbone = timm.create_model('darknet53',
       pretrained=pretrained, pretrained_cfg_overlay=dict(file=weights),
-      features_only=True, out_indices=(3, 4, 5))
+      features_only=True, out_indices=(-3, -2, -1))
 
     self.neck = Neck()
     self.head = Head(num_anchors, num_classes)

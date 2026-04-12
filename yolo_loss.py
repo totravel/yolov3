@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 from torch.nn import functional as F
 from yolo_prior import YOLOv3Prior
-from utils import box_cxcywh, iou_matrix
+from utils import box_norm, box_cxcywh, iou_matrix
 from utils import show_image
 import math
 
@@ -11,7 +11,7 @@ class YOLOv3Loss(YOLOv3Prior):
   def __init__(self, device=torch.device('cpu')):
     super().__init__(device)
     self.num_classes = 20
-    self.ignore_threshold = 0.4
+    self.ignore_threshold = 0.5
     self.bbox_loss_weight = 5
     self.obj_loss_weight = 1
     self.cls_loss_weight = 1
@@ -19,7 +19,7 @@ class YOLOv3Loss(YOLOv3Prior):
 
   def __call__(self, fmaps: tuple[Tensor, Tensor, Tensor], labels: list[tuple[Tensor, Tensor]]):
     batch_size = len(labels)
-    batch_assigned_anchors = [self._assign_anchor(bboxes) for bboxes, _ in labels]
+    batch_assigned_prior_bboxes = [self.assign_prior_bbox(gt_bboxes) for gt_bboxes, _ in labels]
 
     batch_bbox_loss = .0
     batch_obj_loss = .0
@@ -27,60 +27,60 @@ class YOLOv3Loss(YOLOv3Prior):
     batch_noobj_loss = .0
     batch_total_loss = []
 
-    for scale_idx, preds in enumerate(fmaps):
+    for size_idx, preds in enumerate(fmaps):
       fmap_h, fmap_w = preds.shape[-2:]
       stride_h = self.img_h / fmap_h
       stride_w = self.img_w / fmap_w
       # print(f'fmap_size {fmap_h}x{fmap_w}')
 
+      # (N, C, FH, FW) -> (N, FH, FW, num_anchors, 5 + num_classes)
+      preds = preds.permute(0, 2, 3, 1).reshape(batch_size, fmap_h, fmap_w, self.num_anchors, -1)
       targets = torch.zeros(batch_size, fmap_h, fmap_w, self.num_anchors, 5 + self.num_classes, device=self.device)
       bbox_loss_scale = torch.ones(batch_size, fmap_h, fmap_w, self.num_anchors, device=self.device)
       noobj_masks = []
 
-      for img_idx, (assigned_anchors, label) in enumerate(zip(batch_assigned_anchors, labels)):
-        scale_indices, ratio_indices = assigned_anchors
-        bboxes, classes = label
+      for img_idx, (assigned_prior_bboxes, label) in enumerate(zip(batch_assigned_prior_bboxes, labels)):
+        size_indices, ratio_indices = assigned_prior_bboxes
+        gt_bboxes, classes = label
         
-        scale_mask = scale_indices == scale_idx
-        ratio_indices = ratio_indices[scale_mask]
-        bboxes = bboxes[scale_mask]
-        classes = classes[scale_mask]
-        # print(f'assigned {len(bboxes)} bboxes at {scale_idx} scale in image {img_idx}')
+        size_mask = size_indices == size_idx
+        ratio_indices = ratio_indices[size_mask]
+        gt_bboxes = gt_bboxes[size_mask]
+        classes = classes[size_mask]
+        # print(f'assigned {len(gt_bboxes)} gt_bboxes at {size_idx} fmap in image {img_idx}')
         
-        if len(bboxes) > 0:
-          bbox_scale = torch.tensor([stride_w, stride_h, stride_w, stride_h], device=self.device)
-          fmap_bboxes = bboxes / bbox_scale
-          for ratio_idx, bbox, cls in zip(ratio_indices, box_cxcywh(fmap_bboxes), classes):
-            cx, cy, w, h = bbox.tolist()
+        if len(gt_bboxes) > 0:
+          gt_bboxes = box_norm(gt_bboxes, stride_w, stride_h)
+          for ratio_idx, gt_bbox, cls in zip(ratio_indices, box_cxcywh(gt_bboxes), classes):
+            cx, cy, w, h = gt_bbox.tolist()
 
             grid_x, grid_y = int(cx), int(cy)
             tx = cx - grid_x
             ty = cy - grid_y
 
-            anchor_w, anchor_h = self.fmap_anchor_sizes[scale_idx][ratio_idx]
-            tw = math.log(w / anchor_w)
-            th = math.log(h / anchor_h)
+            prior_bbox_w, prior_bbox_h = self.prior_bbox_sizes[size_idx][ratio_idx]
+            tw = math.log(w / prior_bbox_w)
+            th = math.log(h / prior_bbox_h)
 
             targets[img_idx, grid_y, grid_x, ratio_idx, :4] = torch.tensor([tx, ty, tw, th], device=self.device)  # coordinates
             targets[img_idx, grid_y, grid_x, ratio_idx, 4] = 1  # objectness
             targets[img_idx, grid_y, grid_x, ratio_idx, 5+cls] = 1  # class
             bbox_loss_scale[img_idx, grid_y, grid_x, ratio_idx] = w/fmap_w * h/fmap_h
 
-          noobj_mask = self._get_negatives(fmap_bboxes, self.fmap_anchors[scale_idx])
+          noobj_mask = self._get_negatives(gt_bboxes, self.prior_bboxes[size_idx])
           noobj_masks.append(noobj_mask.reshape(fmap_h, fmap_w, self.num_anchors))
         else:
           noobj_masks.append(torch.full(size=(fmap_h, fmap_w, self.num_anchors), fill_value=True, device=self.device))
 
-      # (N, C, FH, FW) -> (N, FH, FW, num_anchors, 5 + num_classes)
-      preds = preds.permute(0, 2, 3, 1).reshape(batch_size, fmap_h, fmap_w, self.num_anchors, -1)
       obj_mask = targets[..., 4] == 1
       noobj_mask = torch.stack(noobj_masks, dim=0)
+      noobj_mask[obj_mask] = False  # excludes assigned prior bboxes
 
-      # if scale_idx == 0:
-      #   mat = obj_mask[-1].max(dim=-1).values
-      #   show_image(mat)
-      #   mat = noobj_mask[-1].min(dim=-1).values
-      #   show_image(mat)
+      # if size_idx == 0:
+      #   obj_pos = obj_mask[-1].max(dim=-1).values
+      #   show_image(obj_pos)
+      #   obj_pos = noobj_mask[-1].min(dim=-1).values
+      #   show_image(obj_pos)
 
       bbox_loss_scale = 2 - bbox_loss_scale
       loss_components = self._criterion(preds, targets, bbox_loss_scale, obj_mask, noobj_mask)
@@ -100,18 +100,18 @@ class YOLOv3Loss(YOLOv3Prior):
 
     return sum(batch_total_loss), batch_bbox_loss, batch_obj_loss, batch_cls_loss, batch_noobj_loss
 
-  def _get_negatives(self, bboxes, anchors):
+  def _get_negatives(self, gt_bboxes, prior_bboxes):
     """
     Args:
-      bboxes (Tensor): (num_bboxes, 4)
-      anchors (Tensor): (FH x FW x num_anchors, 4)
+      gt_bboxes (Tensor): (num_objects, 4)
+      prior_bboxes (Tensor): (FH x FW x num_anchors, 4)
     Returns:
       noobj_mask (Tensor): (FH x FW x num_anchors,)
     """
-    ious = iou_matrix(anchors, bboxes)  # (FH x FW x num_anchors, num_bboxes)
+    ious = iou_matrix(prior_bboxes, gt_bboxes)  # (FH x FW x num_anchors, num_objects)
     ious = ious.max(dim=1).values  # (FH x FW x num_anchors,)
     noobj_mask = ious < self.ignore_threshold
-    # print(f'len(anchors) {len(anchors)}, len(bboxes) {len(bboxes)}, len(noobj) {noobj_mask.sum()}')
+    # print(f'len(prior_bboxes) {len(prior_bboxes)}, len(bboxes) {len(bboxes)}, len(noobj) {noobj_mask.sum()}')
     return noobj_mask
 
   def _criterion(self, preds: Tensor, targets: Tensor, bbox_loss_scale: Tensor, obj_mask: Tensor, noobj_mask: Tensor):

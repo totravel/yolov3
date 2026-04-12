@@ -34,7 +34,8 @@ class VOCDataset(Dataset):
 
     self.transform=transform if transform is not None else lambda *x: x
   
-  def _load_files(self, voc_root, voc_list):
+  @staticmethod
+  def _load_files(voc_root, voc_list):
     img_files, label_files = [], []
 
     for year, splits in voc_list:
@@ -67,11 +68,20 @@ class VOCDataset(Dataset):
     label = self._parse_xml(label_file)
     
     return self.transform(img, label)
-
-  def _parse_xml(self, label_file):
-    root = ET.parse(label_file).getroot()
-    
+  
+  @staticmethod
+  def _parse_xml(label_file):
+    """
+    Args:
+      label_file (str): path to the annotation file
+    Returns:
+      label (tuple):
+        - bboxes (Tensor): (num_bboxes, 4)
+        - classes (Tensor): (num_bboxes,)
+    """
     bboxes, classes = [], []
+    
+    root = ET.parse(label_file).getroot()
     for obj in root.iter('object'):
       
       bbox = obj.find('bndbox')
@@ -121,7 +131,8 @@ class RandomLetterbox:
     img.paste(resized_img, (offset_x, offset_y))
     return img, scale, offset_x, offset_y
   
-  def resize_label(self, label: tuple[Tensor, Tensor], scale, offset_x, offset_y):
+  @staticmethod
+  def resize_label(label: tuple[Tensor, Tensor], scale, offset_x, offset_y):
     bboxes, classes = label
     if len(bboxes) > 0:
       bboxes[:, [0, 2]] = bboxes[:, [0, 2]] * scale + offset_x
@@ -153,8 +164,8 @@ class Letterbox(RandomLetterbox):
     offset_y = pad_h // 2
 
     if len(bboxes) > 0:
-      bboxes[:, [0, 2]] = (bboxes[:, [0, 2]] - offset_x) / scale
-      bboxes[:, [1, 3]] = (bboxes[:, [1, 3]] - offset_y) / scale
+      bboxes[:, [0, 2]] = (bboxes[:, [0, 2]] - offset_x).clamp(min=0, max=resized_w) / scale
+      bboxes[:, [1, 3]] = (bboxes[:, [1, 3]] - offset_y).clamp(min=0, max=resized_h) / scale
     return bboxes
 
 
@@ -164,7 +175,7 @@ class VOCRandomLetterbox:
 
   def __call__(self, img: PILImage, label: tuple[Tensor, Tensor]):
     img, scale, offset_x, offset_y = self.impl.resize_img(img)
-    label = self.impl.resize_label(label, scale, offset_x, offset_y)
+    label = RandomLetterbox.resize_label(label, scale, offset_x, offset_y)
     return img, label
 
 

@@ -10,6 +10,7 @@ A minimal and modern PyTorch implementation of YOLOv3 that leverages pre-trained
 ![](data/demo/messi.png)
 
 ![](data/demo/street.png)
+
 ## Requirements
 
 - conda
@@ -81,3 +82,7 @@ python yolo_train.py
 - SSD: Single Shot MultiBox Detector
 - YOLO9000: Better, Faster, Stronger
 - YOLOv3: An Incremental Improvement
+
+## License
+
+MIT

@@ -59,16 +59,25 @@ def init_weights(m: nn.Module):
 
 def box_cxcywh(boxes: Tensor):
   """[x1, y1, x2, y2] -> [cx, cy, w, h]"""
-  wh = boxes[..., 2:] - boxes[..., :2]
-  cxcy = boxes[..., :2] + wh / 2
-  return torch.cat([cxcy, wh], dim=-1)
+  out_boxes = torch.zeros_like(boxes)
+  out_boxes[..., 2:] = boxes[..., 2:] - boxes[..., :2]
+  out_boxes[..., :2] = boxes[..., :2] + 0.5 * out_boxes[..., 2:]
+  return out_boxes
 
 
 def box_xyxy(boxes: Tensor):
   """[cx, cy, w, h] -> [x1, y1, x2, y2]"""
-  p1 = boxes[..., :2] - boxes[..., 2:] / 2
-  p2 = p1 + boxes[..., 2:]
-  return torch.cat([p1, p2], dim=-1)
+  out_boxes = torch.zeros_like(boxes)
+  out_boxes[..., :2] = boxes[..., :2] - 0.5 * boxes[..., 2:]
+  out_boxes[..., 2:] = out_boxes[..., :2] + boxes[..., 2:]
+  return out_boxes
+
+
+def box_origin_wh(boxes: Tensor):
+  """[x1, y1, x2, y2] -> [0, 0, w, h]"""
+  out_boxes = torch.zeros_like(boxes)
+  out_boxes[..., 2:] = boxes[..., 2:] - boxes[..., :2]
+  return out_boxes
 
 
 def box_norm(boxes: Tensor, stride_w: int, stride_h: int):
@@ -118,7 +127,7 @@ def plot_bboxes(ax: Axes, boxes: list[Tensor], labels: list[str], border=2, font
     x, y = rect.xy
     ax.add_patch(rect)
     bbox=dict(facecolor=color, edgecolor=color, linewidth=border, pad=0)
-    ax.text(x, y, label, bbox=bbox, fontsize=fontsize, backgroundcolor=color, color='w', verticalalignment='bottom')
+    ax.text(x, y, label, bbox=bbox, fontsize=fontsize, backgroundcolor=color, color='w', va='bottom')
 
 
 def show_bboxes(img: PILImage, boxes: list[Tensor], labels: list[str]) -> None:
@@ -168,19 +177,6 @@ def iou_matrix(boxes1: Tensor, boxes2: Tensor) -> Tensor:
   union_areas = areas1[:, None] + areas2[None, :] - inter_areas
 
   return inter_areas / union_areas
-
-
-def nms(boxes: Tensor, scores: Tensor, threshold: float=0.5) -> Tensor:
-  sorted = torch.argsort(scores, descending=True)
-  keep = []
-  while sorted.numel() > 0:
-    i = sorted[0]
-    keep.append(i)
-    if sorted.numel() == 1: break
-    iou = iou_matrix(boxes[i].unsqueeze(0), boxes[sorted[1:]]).reshape(-1)
-    indices = torch.nonzero(iou <= threshold)[:, 0]
-    sorted = sorted[indices + 1]
-  return torch.tensor(keep, device=boxes.device)
 
 
 def box_iou(boxes1: Tensor, boxes2: Tensor, eps=1e-7) -> Tensor:
