@@ -7,8 +7,6 @@ A minimal and modern PyTorch implementation of YOLOv3 that leverages pre-trained
 
 ![](data/demo/eagle.png)
 
-![](data/demo/messi.png)
-
 ![](data/demo/street.png)
 
 ## Requirements
@@ -35,10 +33,10 @@ Download the pretrainded weights from the Release page and place it in the `data
 
 ```sh
 cd data/
-curl -OL https://github.com/totravel/yolov3/releases/download/v1.0/yolo_best.pth
+curl -OL https://github.com/totravel/yolov3/releases/latest/download/yolo_best.pth
 ```
 
-Run the detection script `yolo_detect.py` from the project root directory. Results will be saved to the `out/` folder.
+Run the detection script `yolo_detect.py` from the project root directory. Results will be saved to the `out/results` folder by default.
 
 ```sh
 python yolo_detect.py

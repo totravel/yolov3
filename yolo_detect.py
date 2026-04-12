@@ -17,7 +17,7 @@ def parse_args():
   parser.add_argument('--img', type=str, default='data/img', help='input images')
   parser.add_argument('--conf_thresh', type=float, default=0.5, help='confidence threshold')
   parser.add_argument('--nms_thresh', type=float, default=0.4, help='nms threshold')
-  parser.add_argument('--out_dir', type=str, default='out/img', help='output directory')
+  parser.add_argument('--out_dir', type=str, default='out/results', help='output directory')
   return parser.parse_args()
 
 
